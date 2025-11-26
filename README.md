@@ -1,9 +1,10 @@
-# 🎬 Kodi_Fenlight-Alexa_Skill
+# 🎬 kodi-fenlight-alexa-skill
 
 ![Python](https://img.shields.io/badge/Python-3.9-blue?logo=python&logoColor=white)
 ![Docker](https://img.shields.io/badge/Docker-Ready-2496ED?logo=docker&logoColor=white)
 ![Platform](https://img.shields.io/badge/Platform-Nvidia%20Shield-76B900?logo=nvidia&logoColor=white)
 ![Language](https://img.shields.io/badge/Language-French%20Only-red)
+![Vibe Coding](https://img.shields.io/badge/Built%20with-Google%20Gemini-8E75B2)
 
 **Dockerized middleware to start movies or series within FenLight Kodi add-on on Nvidia Shield via an Alexa skill.**
 
@@ -118,3 +119,9 @@ The script uses a hybrid approach to ensure the Shield is ready before sending t
 1.  **Wake-on-LAN:** Sends a magic packet to wake the network interface.
 2.  **ADB Wake:** Sends standard Android `WAKEUP` key events via ADB.
 3.  **ADB Start:** Forces the Kodi activity to launch if it's not already in the foreground.
+
+## 🤖 Vibe Coding & Credits
+
+**This project is a pure "Vibe Coding" experiment.**
+
+It was entirely architected, debugged, and refined through a continuous natural language dialogue with **Google Gemini**. No manual coding was performed; the human acted as the conductor, and the AI as the expert developer.

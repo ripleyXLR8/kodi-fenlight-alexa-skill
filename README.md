@@ -4,10 +4,14 @@
 ![Docker](https://img.shields.io/badge/Docker-Ready-2496ED?logo=docker&logoColor=white)
 ![Platform](https://img.shields.io/badge/Platform-Nvidia%20Shield-76B900?logo=nvidia&logoColor=white)
 ![Language](https://img.shields.io/badge/Language-English%20%2F%20French-blue)
+![Flask](https://img.shields.io/badge/flask-%23000.svg?style=flat&logo=flask&logoColor=white)
+![License](https://img.shields.io/github/license/ripleyxlr8/kodi-fenlight-alexa-skill?style=flat)
+![Maintenance](https://img.shields.io/badge/Maintained%3F-yes-green.svg?style=flat)
+![Repo Size](https://img.shields.io/github/repo-size/ripleyxlr8/kodi-fenlight-alexa-skill?style=flat)
 ![Vibe Coding](https://img.shields.io/badge/Built%20with-Google%20Gemini-8E75B2)
 [![Buy Me A Coffee](https://img.shields.io/badge/Buy%20Me%20A%20Coffee-support-orange?logo=buymeacoffee&logoColor=white)](https://buymeacoffee.com/ripleyxlr8)
 
-**Dockerized self hosted Alexa skill to start movies or series using voice control with your favorite Kodi add-on running on Nvidia Shield like FenLight, Umbrella, etc... using TMDBHelper as and abstraction layer.**
+**Dockerized middleware to start movies or series within FenLight Kodi add-on on Nvidia Shield via an Alexa skill.**
 
 This project features intelligent power management (ADB/WoL), TMDB series and movie lookup, Trakt.tv resume sync, and automated Fen Light add-on patching to allow use by external players (TMDB Helper).
 
@@ -88,12 +92,8 @@ services:
 2.  **Invocation Name:** Choose something simple like "my cinema" (EN) or "mon cinéma" (FR).
 3.  **Endpoint:** Point it to your server's public HTTPS URL (e.g., using Cloudflare Tunnel): 
     `https://your-domain.com/alexa-webhook`
-4.  **Interaction Model:** * Instead of creating intents manually, go to **JSON Editor** in the Alexa Console.
-    * Drag and drop the `FR.json` (or `US.json`) file found in the `alexa_speech_assets` folder of this repository.
-    * Click **Save Model** and **Build Model**.
+4.  **Interaction Model:** Create the Intents (`PlayMovieIntent`, `PlayTVShowIntent`, `ResumeTVShowIntent`) using the utterance lists provided in this repository's `speech_assets` folder.
 5.  **Slots:** Ensure you create a slot type named `SourceMode` to handle manual selection requests (values: "manually", "select source", "avec choix", etc.).
-
-
 
 ## 🗣️ Usage Examples
 
@@ -134,3 +134,6 @@ It was entirely architected, debugged, and refined through a continuous natural 
 ---
 **Enjoying this project?** If this tool helps you tame your Home Cinema, consider supporting the updates!  
 [![Buy Me A Coffee](https://www.buymeacoffee.com/assets/img/custom_images/orange_img.png)](https://buymeacoffee.com/ripleyxlr8)
+
+## 📄 License
+[MIT License](LICENSE)

@@ -88,8 +88,12 @@ services:
 2.  **Invocation Name:** Choose something simple like "my cinema" (EN) or "mon cinéma" (FR).
 3.  **Endpoint:** Point it to your server's public HTTPS URL (e.g., using Cloudflare Tunnel): 
     `https://your-domain.com/alexa-webhook`
-4.  **Interaction Model:** Create the Intents (`PlayMovieIntent`, `PlayTVShowIntent`, `ResumeTVShowIntent`) using the utterance lists provided in this repository's `speech_assets` folder.
+4.  **Interaction Model:** * Instead of creating intents manually, go to **JSON Editor** in the Alexa Console.
+    * Drag and drop the `FR.json` (or `US.json`) file found in the `alexa_speech_assets` folder of this repository.
+    * Click **Save Model** and **Build Model**.
 5.  **Slots:** Ensure you create a slot type named `SourceMode` to handle manual selection requests (values: "manually", "select source", "avec choix", etc.).
+
+
 
 ## 🗣️ Usage Examples
 

@@ -45,10 +45,12 @@ Create these `.json` files in your Kodi userdata folder:
 * **fenlight_auto.json**: Standard URL for Fen Light playback (uses your default settings).
 * **fenlight_select.json**: Same URL but with `&source_select=true` appended to force the source list.
 
+You can create you own file for your favorite Kodi video player.
+
 ### 2. Docker Deployment
 This application is designed to run in a Docker container.
 
-**Note on Network:** Using `network_mode: host` or a macvlan (like `br0` on Unraid) is **highly recommended**. Wake-on-LAN (WoL) magic packets often cannot pass through the standard Docker NAT bridge.
+**Note on Network:** Using `network_mode: host` or a macvlan (like `br0`) is **highly recommended**. Wake-on-LAN (WoL) magic packets often cannot pass through the standard Docker NAT bridge.
 
 **docker-compose.yaml:**
 ```yaml

@@ -1,4 +1,4 @@
-# 🎬 My Cinema Amazon Skill
+# 🎬 My Cinema Amazon Skill for Kodi
 
 ![Python](https://img.shields.io/badge/Python-3.9-blue?logo=python&logoColor=white)
 ![Docker](https://img.shields.io/badge/Docker-Ready-2496ED?logo=docker&logoColor=white)

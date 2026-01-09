@@ -1,13 +1,13 @@
 # ==============================================================================
 # FICHIER : app.py
-# VERSION : 1.5.0
-# DATE    : 2025-12-05 10:00:00 (CET)
+# VERSION : 1.5.1
+# DATE    : 2025-12-05 14:30:00 (CET)
 # AUTEUR  : Richard Perez (richard@perez-mail.fr)
 #
 # DESCRIPTION : 
 # Skill Alexa pour contrôle vocal de Kodi sur Nvidia Shield.
-# UPDATE v1.5.0 : Mise à jour majeure de l'Auto-Patcher pour contrer la nouvelle
-# protection de Fen Light (playback_key) située dans kodi_utils.py.
+# UPDATE v1.5.1 : Ajout d'un Health Check au démarrage pour vérifier la validité
+# des clés API (TMDB et Token Trakt) et alerter en cas d'expiration.
 # ==============================================================================
 
 from flask import Flask, request, jsonify
@@ -30,7 +30,7 @@ logging.basicConfig(
 logger = logging.getLogger("KodiMiddleware")
 
 # --- METADATA ---
-APP_VERSION = "1.5.0"
+APP_VERSION = "1.5.1"
 APP_DATE = "2025-12-05"
 APP_AUTHOR = "Richard Perez"
 
@@ -92,7 +92,7 @@ TRAKT_ACCESS_TOKEN = os.getenv("TRAKT_ACCESS_TOKEN")
 PLAYER_DEFAULT = os.getenv("PLAYER_DEFAULT", "fenlight_auto.json")
 PLAYER_SELECT = os.getenv("PLAYER_SELECT", "fenlight_select.json")
 
-# --- CONFIGURATION AUTO-PATCHER (NEW v1.5.0) ---
+# --- CONFIGURATION AUTO-PATCHER ---
 # Cible : kodi_utils.py au lieu de sources.py
 FENLIGHT_UTILS_REMOTE_PATH = "/sdcard/Android/data/org.xbmc.kodi/files/.kodi/addons/plugin.video.fenlight/resources/lib/modules/kodi_utils.py"
 FENLIGHT_LOCAL_TEMP = "/tmp/kodi_utils.py"
@@ -132,8 +132,6 @@ def check_and_patch_fenlight():
         patched = False
         
         # Patch 1 : Bypass player_check verification
-        # Original: if mode == 'playback.%s' % playback_key():
-        # Target:   if True: # mode == 'playback.%s' % playback_key():
         if "if mode == 'playback.%s' % playback_key():" in content:
             logger.info("[PATCHER] Verrou 'player_check' détecté. Application du patch...")
             content = content.replace(
@@ -143,8 +141,6 @@ def check_and_patch_fenlight():
             patched = True
 
         # Patch 2 : Bypass external_playback_check verification
-        # Original: if not playback_key() in params:
-        # Target:   if False: # not playback_key() in params:
         if "if not playback_key() in params:" in content:
             logger.info("[PATCHER] Verrou 'external_playback_check' détecté. Application du patch...")
             content = content.replace(
@@ -221,7 +217,64 @@ def wake_and_start_kodi():
     return False
 
 # ==========================================
-# 4. HELPERS
+# 4. API CHECKER (NEW v1.5.1)
+# ==========================================
+def verify_api_status():
+    logger.info("--- VÉRIFICATION DES ACCÈS API ---")
+    all_good = True
+
+    # 1. Vérification TMDB
+    if not TMDB_API_KEY:
+        logger.error("[API] TMDB_API_KEY est manquant !")
+        all_good = False
+    else:
+        try:
+            # Test sur "Avatar" (ID 19995)
+            url = f"https://api.themoviedb.org/3/movie/19995?api_key={TMDB_API_KEY}"
+            r = requests.get(url, timeout=5)
+            if r.status_code == 200:
+                logger.info("[API] TMDB : OK ✅")
+            elif r.status_code == 401:
+                logger.critical("[API] TMDB : Clé invalide ou révoquée (401) ❌")
+                all_good = False
+            else:
+                logger.warning(f"[API] TMDB : Réponse inattendue ({r.status_code})")
+        except Exception as e:
+            logger.error(f"[API] TMDB : Erreur de connexion ({e})")
+
+    # 2. Vérification Trakt
+    if not TRAKT_ACCESS_TOKEN or not TRAKT_CLIENT_ID:
+        logger.error("[API] Identifiants TRAKT manquants !")
+        all_good = False
+    else:
+        headers = {
+            'Content-Type': 'application/json',
+            'trakt-api-version': '2',
+            'trakt-api-key': TRAKT_CLIENT_ID,
+            'Authorization': f'Bearer {TRAKT_ACCESS_TOKEN}'
+        }
+        try:
+            # Endpoint nécessitant une auth pour vérifier le token
+            url = "https://api.trakt.tv/users/settings"
+            r = requests.get(url, headers=headers, timeout=5)
+            if r.status_code == 200:
+                logger.info("[API] TRAKT : Token OK ✅")
+            elif r.status_code == 401:
+                logger.critical("[API] TRAKT : Token EXPIRÉ ou Invalide (401) ❌. Veuillez régénérer le token !")
+                all_good = False
+            else:
+                logger.warning(f"[API] TRAKT : Réponse inattendue ({r.status_code})")
+        except Exception as e:
+            logger.error(f"[API] TRAKT : Erreur de connexion ({e})")
+
+    if not all_good:
+        logger.critical("⚠️  ATTENTION : CERTAINES FONCTIONS RISQUENT D'ÉCHOUER ⚠️")
+    else:
+        logger.info("✅ TOUS LES SYSTÈMES SONT OPÉRATIONNELS")
+    logger.info("-" * 30)
+
+# ==========================================
+# 5. HELPERS
 # ==========================================
 
 def search_tmdb_movie(query, year=None, lang="fr"):
@@ -351,7 +404,7 @@ def worker_process(plugin_url):
     logger.info(">>> FIN PROCESSUS LECTURE")
 
 # ==========================================
-# 5. ROUTE FLASK
+# 6. ROUTE FLASK
 # ==========================================
 
 @app.route('/alexa-webhook', methods=['POST'])
@@ -532,6 +585,7 @@ def print_startup_banner():
 
 if __name__ == '__main__':
     print_startup_banner()
+    verify_api_status() # <--- VERIFICATION ICI
     load_translations() 
     patcher_thread = threading.Thread(target=patcher_scheduler, daemon=True)
     patcher_thread.start()

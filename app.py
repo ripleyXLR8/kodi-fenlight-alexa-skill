@@ -1,13 +1,13 @@
 # ==============================================================================
 # FICHIER : app.py
-# VERSION : 1.4.6
-# DATE    : 2025-11-29 14:40:00 (CET)
+# VERSION : 1.5.0
+# DATE    : 2025-12-05 10:00:00 (CET)
 # AUTEUR  : Richard Perez (richard@perez-mail.fr)
 #
 # DESCRIPTION : 
 # Skill Alexa pour contrôle vocal de Kodi sur Nvidia Shield.
-# UPDATE v1.4.6 : Augmentation des timeouts ADB (5s) pour éviter les échecs
-# de réveil sur les systèmes lents ou chargés.
+# UPDATE v1.5.0 : Mise à jour majeure de l'Auto-Patcher pour contrer la nouvelle
+# protection de Fen Light (playback_key) située dans kodi_utils.py.
 # ==============================================================================
 
 from flask import Flask, request, jsonify
@@ -30,8 +30,8 @@ logging.basicConfig(
 logger = logging.getLogger("KodiMiddleware")
 
 # --- METADATA ---
-APP_VERSION = "1.4.5"
-APP_DATE = "2025-11-27"
+APP_VERSION = "1.5.0"
+APP_DATE = "2025-12-05"
 APP_AUTHOR = "Richard Perez"
 
 app = Flask(__name__)
@@ -92,10 +92,10 @@ TRAKT_ACCESS_TOKEN = os.getenv("TRAKT_ACCESS_TOKEN")
 PLAYER_DEFAULT = os.getenv("PLAYER_DEFAULT", "fenlight_auto.json")
 PLAYER_SELECT = os.getenv("PLAYER_SELECT", "fenlight_select.json")
 
-# --- CONFIGURATION AUTO-PATCHER ---
-FENLIGHT_REMOTE_PATH = "/sdcard/Android/data/org.xbmc.kodi/files/.kodi/addons/plugin.video.fenlight/resources/lib/modules/sources.py"
-FENLIGHT_LOCAL_TEMP = "/tmp/sources.py"
-BLOCKING_CODE_SNIPPET = "return kodi_utils.notification('WARNING: External Playback Detected!')"
+# --- CONFIGURATION AUTO-PATCHER (NEW v1.5.0) ---
+# Cible : kodi_utils.py au lieu de sources.py
+FENLIGHT_UTILS_REMOTE_PATH = "/sdcard/Android/data/org.xbmc.kodi/files/.kodi/addons/plugin.video.fenlight/resources/lib/modules/kodi_utils.py"
+FENLIGHT_LOCAL_TEMP = "/tmp/kodi_utils.py"
 PATCH_CHECK_INTERVAL = 3600 
 
 # URL de base Kodi
@@ -106,11 +106,11 @@ else:
     logger.critical("Configuration incomplète : SHIELD_IP ou KODI_PORT manquant.")
 
 # ==========================================
-# 2. AUTO-PATCHER
+# 2. AUTO-PATCHER (LOGIQUE MISE À JOUR)
 # ==========================================
 def check_and_patch_fenlight():
     if not SHIELD_IP: return
-    if DEBUG_MODE: logger.info(f"[PATCHER] Vérification intégrité Fen Light...")
+    if DEBUG_MODE: logger.info(f"[PATCHER] Vérification intégrité Fen Light (kodi_utils.py)...")
     
     try:
         subprocess.run(["adb", "disconnect", SHIELD_IP], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
@@ -122,36 +122,46 @@ def check_and_patch_fenlight():
     if os.path.exists(FENLIGHT_LOCAL_TEMP): os.remove(FENLIGHT_LOCAL_TEMP)
     
     try:
-        res = subprocess.run(["adb", "pull", FENLIGHT_REMOTE_PATH, FENLIGHT_LOCAL_TEMP], capture_output=True, timeout=10)
+        res = subprocess.run(["adb", "pull", FENLIGHT_UTILS_REMOTE_PATH, FENLIGHT_LOCAL_TEMP], capture_output=True, timeout=10)
         if res.returncode != 0: return 
     except: return
 
     try:
-        with open(FENLIGHT_LOCAL_TEMP, 'r', encoding='utf-8') as f: lines = f.readlines()
-        new_lines, patched = [], False
-        already_patched = False
+        with open(FENLIGHT_LOCAL_TEMP, 'r', encoding='utf-8') as f: content = f.read()
         
-        for line in lines:
-            if BLOCKING_CODE_SNIPPET in line:
-                if line.strip().startswith("#"):
-                    already_patched = True
-                    new_lines.append(line)
-                else:
-                    logger.info("[PATCHER] Protection détectée ! Application du patch...")
-                    new_lines.append("# " + line.lstrip())
-                    patched = True
-            else:
-                new_lines.append(line)
+        patched = False
+        
+        # Patch 1 : Bypass player_check verification
+        # Original: if mode == 'playback.%s' % playback_key():
+        # Target:   if True: # mode == 'playback.%s' % playback_key():
+        if "if mode == 'playback.%s' % playback_key():" in content:
+            logger.info("[PATCHER] Verrou 'player_check' détecté. Application du patch...")
+            content = content.replace(
+                "if mode == 'playback.%s' % playback_key():", 
+                "if True: # mode == 'playback.%s' % playback_key():"
+            )
+            patched = True
+
+        # Patch 2 : Bypass external_playback_check verification
+        # Original: if not playback_key() in params:
+        # Target:   if False: # not playback_key() in params:
+        if "if not playback_key() in params:" in content:
+            logger.info("[PATCHER] Verrou 'external_playback_check' détecté. Application du patch...")
+            content = content.replace(
+                "if not playback_key() in params:", 
+                "if False: # not playback_key() in params:"
+            )
+            patched = True
         
         if patched:
-            with open(FENLIGHT_LOCAL_TEMP, 'w', encoding='utf-8') as f: f.writelines(new_lines)
-            push_res = subprocess.run(["adb", "push", FENLIGHT_LOCAL_TEMP, FENLIGHT_REMOTE_PATH], capture_output=True)
+            with open(FENLIGHT_LOCAL_TEMP, 'w', encoding='utf-8') as f: f.write(content)
+            push_res = subprocess.run(["adb", "push", FENLIGHT_LOCAL_TEMP, FENLIGHT_UTILS_REMOTE_PATH], capture_output=True)
             if push_res.returncode == 0:
-                logger.info("[PATCHER] SUCCÈS : Patch appliqué.")
+                logger.info("[PATCHER] SUCCÈS : Patchs appliqués sur kodi_utils.py.")
             else:
                 logger.error("[PATCHER] ÉCHEC : Impossible d'écrire sur la Shield.")
-        elif already_patched and DEBUG_MODE:
-            logger.info("[PATCHER] OK : Déjà patché.")
+        elif DEBUG_MODE:
+            logger.info("[PATCHER] OK : Fichier déjà patché ou non compatible.")
             
     except Exception as e:
         logger.error(f"[PATCHER] Erreur: {e}")
@@ -186,12 +196,10 @@ def wake_and_start_kodi():
     except Exception as e: logger.error(f"[POWER] Erreur WoL: {e}")
 
     try:
-        # Increase connection timeout to 5s
+        # Timeouts à 5s
         subprocess.run(["adb", "connect", SHIELD_IP], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=5)
-        # Increase wake command timeout to 5s
         subprocess.run(["adb", "shell", "input", "keyevent", "WAKEUP"], stdout=subprocess.DEVNULL, timeout=5)
         time.sleep(0.5)
-        # Increase second wake command timeout to 5s
         subprocess.run(["adb", "shell", "input", "keyevent", "WAKEUP"], stdout=subprocess.DEVNULL, timeout=5)
     except Exception as e: logger.error(f"[POWER] Erreur ADB: {e}")
 
@@ -199,7 +207,6 @@ def wake_and_start_kodi():
 
     logger.info("[POWER] Lancement de Kodi...")
     try: 
-        # Increase app launch timeout to 5s
         subprocess.run(["adb", "shell", "am", "start", "-n", "org.xbmc.kodi/.Splash"], stdout=subprocess.DEVNULL, timeout=5)
     except: pass
 
@@ -212,7 +219,7 @@ def wake_and_start_kodi():
     
     logger.error("[POWER] Echec : Kodi ne répond pas.")
     return False
-    
+
 # ==========================================
 # 4. HELPERS
 # ==========================================
@@ -285,11 +292,21 @@ def get_trakt_next_episode(tmdb_show_id):
     headers = {'Content-Type': 'application/json', 'trakt-api-version': '2', 'trakt-api-key': TRAKT_CLIENT_ID, 'Authorization': f'Bearer {TRAKT_ACCESS_TOKEN}'}
     try:
         r = requests.get(f"https://api.trakt.tv/search/tmdb/{tmdb_show_id}?type=show", headers=headers, timeout=2)
+        
+        if r.status_code != 200:
+            logger.error(f"[TRAKT] Erreur API Search (Code {r.status_code}): {r.text}")
+            return None, None
+
         results = r.json()
         if not results: return None, None
         trakt_id = results[0]['show']['ids']['trakt']
         
         r = requests.get(f"https://api.trakt.tv/shows/{trakt_id}/progress/watched", headers=headers, timeout=2)
+        
+        if r.status_code != 200:
+            logger.error(f"[TRAKT] Erreur API Progress (Code {r.status_code}): {r.text}")
+            return None, None
+
         next_ep = r.json().get('next_episode')
         
         if next_ep:
@@ -297,6 +314,8 @@ def get_trakt_next_episode(tmdb_show_id):
             return next_ep['season'], next_ep['number']
         else:
             logger.info("[TRAKT] Pas de progression.")
+    except json.JSONDecodeError:
+        logger.error(f"[TRAKT] Erreur décodage JSON. Réponse brute: {r.text}")
     except Exception as e:
         logger.error(f"[TRAKT] Erreur : {e}")
     return None, None

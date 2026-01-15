@@ -1,13 +1,13 @@
 # ==============================================================================
 # FICHIER : app.py
-# VERSION : 1.6.1
-# DATE    : 2025-12-05 17:00:00 (CET)
+# VERSION : 1.6.2
+# DATE    : 2025-12-05 18:00:00 (CET)
 # AUTEUR  : Richard Perez (richard@perez-mail.fr)
 #
 # DESCRIPTION : 
 # Skill Alexa pour contrôle vocal de Kodi sur Nvidia Shield.
-# UPDATE v1.6.1 : Restauration de la bannière de démarrage détaillée 
-# avec status des tokens Trakt gérés dynamiquement.
+# UPDATE v1.6.2 : Amélioration de l'Auto-Patcher. Il détecte maintenant si le 
+# patch est déjà appliqué ou si la version du fichier cible est incompatible.
 # ==============================================================================
 
 from flask import Flask, request, jsonify
@@ -30,7 +30,7 @@ logging.basicConfig(
 logger = logging.getLogger("KodiMiddleware")
 
 # --- METADATA ---
-APP_VERSION = "1.6.1"
+APP_VERSION = "1.6.2"
 APP_DATE = "2025-12-05"
 APP_AUTHOR = "Richard Perez"
 
@@ -54,7 +54,6 @@ TOKEN_FILE = os.path.join(DATA_DIR, "trakt_tokens.json")
 TMDB_API_KEY = os.getenv("TMDB_API_KEY")
 TRAKT_CLIENT_ID = os.getenv("TRAKT_CLIENT_ID")
 TRAKT_CLIENT_SECRET = os.getenv("TRAKT_CLIENT_SECRET")
-# Les tokens initiaux (pour le premier lancement seulement)
 ENV_TRAKT_ACCESS_TOKEN = os.getenv("TRAKT_ACCESS_TOKEN")
 ENV_TRAKT_REFRESH_TOKEN = os.getenv("TRAKT_REFRESH_TOKEN")
 
@@ -85,8 +84,6 @@ else:
 # ==========================================
 
 def load_trakt_token():
-    """Charge le token depuis le fichier JSON ou initialise avec les ENV vars."""
-    # 1. Essayer de charger depuis le fichier JSON (Prioritaire)
     if os.path.exists(TOKEN_FILE):
         try:
             with open(TOKEN_FILE, 'r') as f:
@@ -96,7 +93,6 @@ def load_trakt_token():
         except Exception as e:
             logger.error(f"[TOKEN] Erreur lecture fichier token : {e}")
 
-    # 2. Si pas de fichier, utiliser les variables d'environnement (Bootstrap)
     if ENV_TRAKT_ACCESS_TOKEN and ENV_TRAKT_REFRESH_TOKEN:
         logger.info("[TOKEN] Initialisation du fichier tokens depuis les variables d'environnement.")
         save_trakt_token_data(ENV_TRAKT_ACCESS_TOKEN, ENV_TRAKT_REFRESH_TOKEN)
@@ -106,7 +102,6 @@ def load_trakt_token():
     return None
 
 def get_refresh_token_from_storage():
-    """Récupère le refresh token stocké pour le renouvellement."""
     if os.path.exists(TOKEN_FILE):
         try:
             with open(TOKEN_FILE, 'r') as f:
@@ -115,26 +110,17 @@ def get_refresh_token_from_storage():
     return ENV_TRAKT_REFRESH_TOKEN
 
 def save_trakt_token_data(access_token, refresh_token):
-    """Sauvegarde les nouveaux tokens dans le volume persistant."""
     if not os.path.exists(DATA_DIR):
         os.makedirs(DATA_DIR, exist_ok=True)
-    
-    data = {
-        "access_token": access_token,
-        "refresh_token": refresh_token,
-        "updated_at": time.time()
-    }
+    data = {"access_token": access_token, "refresh_token": refresh_token, "updated_at": time.time()}
     try:
-        with open(TOKEN_FILE, 'w') as f:
-            json.dump(data, f)
+        with open(TOKEN_FILE, 'w') as f: json.dump(data, f)
         logger.info("[TOKEN] Tokens mis à jour et sauvegardés dans trakt_tokens.json ✅")
     except Exception as e:
         logger.error(f"[TOKEN] Impossible de sauvegarder les tokens : {e}")
 
 def refresh_trakt_token_online():
-    """Effectue la requête de renouvellement auprès de Trakt."""
     logger.info("[TOKEN] Tentative de renouvellement du token...")
-    
     refresh_token = get_refresh_token_from_storage()
     if not refresh_token or not TRAKT_CLIENT_SECRET:
         logger.error("[TOKEN] Impossible de renouveler : Refresh Token ou Client Secret manquant.")
@@ -153,19 +139,16 @@ def refresh_trakt_token_online():
         r = requests.post(url, json=payload, headers={'Content-Type': 'application/json'}, timeout=10)
         if r.status_code == 200:
             data = r.json()
-            new_access = data['access_token']
-            new_refresh = data['refresh_token']
-            save_trakt_token_data(new_access, new_refresh)
-            return new_access
+            save_trakt_token_data(data['access_token'], data['refresh_token'])
+            return data['access_token']
         else:
             logger.error(f"[TOKEN] Echec renouvellement (Code {r.status_code}): {r.text}")
     except Exception as e:
         logger.error(f"[TOKEN] Exception lors du renouvellement : {e}")
-    
     return None
 
 # ==========================================
-# 3. TRADUCTIONS & PATCHER
+# 3. TRADUCTIONS & PATCHER (UPDATED v1.6.2)
 # ==========================================
 TRANSLATIONS = {}
 
@@ -191,14 +174,19 @@ def get_text(key, lang="fr", *args):
     return text_template
 
 def check_and_patch_fenlight():
+    """Vérifie et patche kodi_utils.py de manière intelligente."""
     if not SHIELD_IP: return
     if DEBUG_MODE: logger.info(f"[PATCHER] Vérification intégrité Fen Light (kodi_utils.py)...")
+    
     try:
         subprocess.run(["adb", "disconnect", SHIELD_IP], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         subprocess.run(["adb", "connect", SHIELD_IP], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=5)
-    except: return
+    except Exception as e:
+        if DEBUG_MODE: logger.error(f"[PATCHER] Erreur ADB Connect: {e}")
+        return
 
     if os.path.exists(FENLIGHT_LOCAL_TEMP): os.remove(FENLIGHT_LOCAL_TEMP)
+    
     try:
         res = subprocess.run(["adb", "pull", FENLIGHT_UTILS_REMOTE_PATH, FENLIGHT_LOCAL_TEMP], capture_output=True, timeout=10)
         if res.returncode != 0: return 
@@ -206,20 +194,57 @@ def check_and_patch_fenlight():
 
     try:
         with open(FENLIGHT_LOCAL_TEMP, 'r', encoding='utf-8') as f: content = f.read()
+        
+        # Définition des signatures
+        TARGET_1_ORIG = "if mode == 'playback.%s' % playback_key():"
+        TARGET_1_PATCH = "if True: # mode == 'playback.%s' % playback_key():"
+        
+        TARGET_2_ORIG = "if not playback_key() in params:"
+        TARGET_2_PATCH = "if False: # not playback_key() in params:"
+        
+        # Analyse de l'état du fichier
+        has_patch_1 = TARGET_1_PATCH in content
+        has_patch_2 = TARGET_2_PATCH in content
+        has_orig_1 = TARGET_1_ORIG in content
+        has_orig_2 = TARGET_2_ORIG in content
+        
+        # Cas 1 : Déjà Patché
+        if has_patch_1 and has_patch_2:
+            if DEBUG_MODE: logger.info("[PATCHER] OK : Fichier déjà patché.")
+            return
+
+        # Cas 2 : Version inconnue ou incompatible
+        if not has_orig_1 and not has_patch_1:
+             logger.warning("[PATCHER] ALERTE : Code 'player_check' introuvable ! Version de Fen Light incompatible ?")
+             return
+        if not has_orig_2 and not has_patch_2:
+             logger.warning("[PATCHER] ALERTE : Code 'external_playback_check' introuvable ! Version de Fen Light incompatible ?")
+             return
+
+        # Cas 3 : Application du Patch
+        new_content = content
         patched = False
         
-        if "if mode == 'playback.%s' % playback_key():" in content:
-            content = content.replace("if mode == 'playback.%s' % playback_key():", "if True: # mode == 'playback.%s' % playback_key():")
+        if has_orig_1:
+            logger.info("[PATCHER] Verrou 'player_check' détecté. Application du patch...")
+            new_content = new_content.replace(TARGET_1_ORIG, TARGET_1_PATCH)
             patched = True
-        if "if not playback_key() in params:" in content:
-            content = content.replace("if not playback_key() in params:", "if False: # not playback_key() in params:")
+            
+        if has_orig_2:
+            logger.info("[PATCHER] Verrou 'external_playback_check' détecté. Application du patch...")
+            new_content = new_content.replace(TARGET_2_ORIG, TARGET_2_PATCH)
             patched = True
         
         if patched:
-            with open(FENLIGHT_LOCAL_TEMP, 'w', encoding='utf-8') as f: f.write(content)
-            subprocess.run(["adb", "push", FENLIGHT_LOCAL_TEMP, FENLIGHT_UTILS_REMOTE_PATH], capture_output=True)
-            logger.info("[PATCHER] Patch appliqué.")
-    except Exception as e: logger.error(f"[PATCHER] Erreur: {e}")
+            with open(FENLIGHT_LOCAL_TEMP, 'w', encoding='utf-8') as f: f.write(new_content)
+            push_res = subprocess.run(["adb", "push", FENLIGHT_LOCAL_TEMP, FENLIGHT_UTILS_REMOTE_PATH], capture_output=True)
+            if push_res.returncode == 0:
+                logger.info("[PATCHER] SUCCÈS : Patchs appliqués sur kodi_utils.py.")
+            else:
+                logger.error("[PATCHER] ÉCHEC : Impossible d'écrire sur la Shield.")
+            
+    except Exception as e:
+        logger.error(f"[PATCHER] Erreur: {e}")
 
 def patcher_scheduler():
     while True:
@@ -537,7 +562,7 @@ def build_response(text, end_session=True, attributes={}):
 def print_startup_banner():
     masked_key = f"{TMDB_API_KEY[:4]}...{TMDB_API_KEY[-4:]}" if TMDB_API_KEY else "MISSING"
     
-    # Check si le token est chargé (soit via ENV, soit via fichier JSON)
+    # Check token status
     current_token = load_trakt_token()
     if current_token:
         masked_trakt = "Loaded (from file/env)"
@@ -546,7 +571,7 @@ def print_startup_banner():
 
     print("\n" + "="*50)
     print(f" KODI ALEXA CONTROLLER")
-    print(f" Version : {APP_VERSION} (Auto-Refresh Trakt Enabled)")
+    print(f" Version : {APP_VERSION} (Auto-Refresh + Smart Patcher)")
     print(f" Date    : {APP_DATE}")
     print(f" Author  : {APP_AUTHOR}")
     print(f" Debug   : {'ON' if DEBUG_MODE else 'OFF'}")

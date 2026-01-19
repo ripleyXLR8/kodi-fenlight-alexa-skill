@@ -19,7 +19,13 @@
         "launch_last": "Je lance le dernier épisode de {}.",
         "unavailable": "Désolé, information indisponible.",
         "cancelled": "Annulé.",
-        "not_understood": "Je n'ai pas compris."
+        "not_understood": "Je n'ai pas compris.",
+        "change_source_movie": "Recherche d'autres sources pour le film {}...",
+        "change_source_episode": "Recherche d'autres sources pour {} saison {} épisode {}...",
+        "nothing_playing": "Rien n'est en cours de lecture.",
+        "kodi_offline": "Kodi ne semble pas joignable.",
+        "content_error": "Impossible d'identifier le contenu en cours.",
+        "patcher_triggered": "Lancement de la réparation de Fen Light..."
     },
     "en": {
         "launch": "My Cinema is open. What do you want to watch?",
@@ -41,6 +47,12 @@
         "launch_last": "Playing the latest episode of {}.",
         "unavailable": "Sorry, information unavailable.",
         "cancelled": "Cancelled.",
-        "not_understood": "I didn't understand."
+        "not_understood": "I didn't understand.",
+        "change_source_movie": "Searching for other sources for movie {}...",
+        "change_source_episode": "Searching for other sources for {} season {} episode {}...",
+        "nothing_playing": "Nothing is currently playing.",
+        "kodi_offline": "Kodi seems unreachable.",
+        "content_error": "Cannot identify playing content.",
+        "patcher_triggered": "Starting Fen Light repair..."
     }
 }
